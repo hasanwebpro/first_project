@@ -1,0 +1,771 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>3D Credit Card — Interactive</title>
+
+<!-- Google Font -->
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;500;700&display=swap" rel="stylesheet">
+
+<style>
+  :root{
+    --bg:#0f1724;
+    --card-w:380px;
+    --card-h:240px;
+    --accent:#00d26a; /* vivid green */
+    --muted:#9aa7b2;
+    --glass: rgba(255,255,255,0.06);
+  }
+
+  *{box-sizing:border-box;font-family: "Montserrat",system-ui,-apple-system,Segoe UI,Roboto,"Helvetica Neue",Arial;}
+
+ body{ margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center; background: radial-gradient(1200px 600px at 10% 20%, rgba(0,110,255,0.06), transparent 60%), radial-gradient(900px 400px at 90% 80%, rgba(0,255,150,0.03), transparent 60%), var(--bg); color:#e6eef6; padding:40px; }
+
+  .wrap{
+    max-width:1100px;
+    width:100%;
+    display:grid;
+    grid-template-columns: var(--card-w) 1fr;
+    gap:32px;
+    align-items:start;
+  }
+
+#bg-video {
+    position: fixed; /* key to prevent pushing content */
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    z-index: -2; /* behind gradient and content */
+    pointer-events: none;
+    filter: blur(76px); /* adds a blur effect */
+    transform: scale(1.05); /* optional: slightly enlarge so edges aren’t visible when blurred */
+}
+
+
+  /* Card container */
+  .card-scene{
+    perspective:1200px;
+    width:var(--card-w);
+    height:var(--card-h);
+    position:relative;
+  }
+
+  .card{
+    width:100%;
+    height:100%;
+    border-radius:20px;
+    transform-style:preserve-3d;
+    transition: transform 350ms cubic-bezier(.2,.9,.2,1);
+    will-change:transform;
+    cursor:grab;
+    box-shadow:
+      0 12px 30px rgba(2,6,23,0.6),
+      0 2px 8px rgba(0,0,0,0.5),
+      inset 0 1px 0 rgba(255,255,255,0.02);
+    position:relative;
+    user-select:none;
+  }
+
+  /* Card faces */
+  .face{
+    position:absolute;
+    inset:0;
+    border-radius:20px;
+    -webkit-backface-visibility:hidden;
+    backface-visibility:hidden;
+    display:flex;
+    flex-direction:column;
+    justify-content:space-between;
+    padding:22px;
+    color:white;
+  }
+
+  .front{
+    background: linear-gradient(135deg, rgba(1,10,27,1) 0%, rgba(6,17,34,0.98) 50%), linear-gradient(120deg, rgba(255,255,255,0.03), transparent 30%);
+    transform: translateZ(30px);
+    box-shadow: 0 6px 18px rgba(0,0,0,0.5);
+    border: 1px solid rgba(255,255,255,0.04);
+    overflow:hidden;
+  }
+
+  .back{
+    background: linear-gradient(135deg, #0b1220 0%, #071122 100%);
+    transform: rotateY(180deg) translateZ(30px);
+    border: 1px solid rgba(255,255,255,0.03);
+  }
+
+  /* Decorations on card */
+  .chip{
+    width:56px;height:40px;border-radius:6px;background:linear-gradient(180deg,#ffd89b,#c5883f);
+    box-shadow: inset 0 -6px 12px rgba(0,0,0,0.25);
+    border:1px solid rgba(255,255,255,0.06);
+  }
+
+  .brand{
+    font-weight:700;
+    letter-spacing:1px;
+    font-size:18px;
+    text-transform:uppercase;
+  }
+
+  .card-number{
+    margin-top:6px;
+    font-size:20px;
+    letter-spacing:2px;
+    display:flex;
+    align-items:center;
+    gap:8px;
+    min-height:28px;
+  }
+
+  .small{
+    font-size:12px; color:var(--muted);
+  }
+
+  /* live-field wrappers (green/red highlight & tick) */
+  .live-field{
+    position:relative;
+    display:inline-flex;
+    align-items:center;
+    gap:8px;
+    padding:6px 10px;
+    border-radius:8px;
+    transition: box-shadow 200ms, transform 200ms;
+    background:transparent;
+  }
+
+  .live-field.valid{
+    box-shadow: 0 6px 18px rgba(0,210,120,0.12), 0 2px 6px rgba(0,0,0,0.25);
+    border:1px solid rgba(0,210,120,0.18);
+  }
+
+  .live-field.invalid{
+    box-shadow: 0 6px 18px rgba(210,60,60,0.12);
+    border:1px solid rgba(210,60,60,0.18);
+  }
+
+  .tick{
+    width:22px;height:22px;display:inline-grid;place-items:center;border-radius:999px;
+    background:rgba(0,0,0,0.16);box-shadow: inset 0 -2px 0 rgba(255,255,255,0.02);
+  }
+
+  .tick svg{ width:14px; height:14px; opacity:0; transform:scale(.75); transition: all 200ms; }
+  .live-field.valid .tick svg{ opacity:1; transform:scale(1); color:var(--accent); filter: drop-shadow(0 3px 6px rgba(0,210,120,0.18)); }
+
+  /* number groups styling */
+  .num-group{ min-width:46px; text-align:center; }
+
+  /* form area */
+  .controls{
+    padding:18px;
+    border-radius:12px;
+    background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+    border:1px solid rgba(255,255,255,0.03);
+  }
+
+  .form-row{
+    display:flex;
+    gap:12px;
+    margin-bottom:12px;
+    align-items:center;
+  }
+
+  label{
+    font-size:13px;color:var(--muted);min-width:88px;
+  }
+
+  .inputs{
+    flex:1;
+  }
+
+  input[type="text"], input[type="tel"], input[type="month"]{
+    width:100%;
+    padding:10px 12px;
+    border-radius:10px;
+    border:1px solid rgba(255,255,255,0.06);
+    background: rgba(255,255,255,0.02);
+    color:inherit;
+    font-size:15px;
+    outline:none;
+    transition: box-shadow 160ms, border-color 160ms;
+  }
+
+  input:focus{ box-shadow: 0 6px 20px rgba(3,8,23,0.5); border-color: rgba(255,255,255,0.12); }
+
+  .hint{ font-size:12px;color:var(--muted); margin-top:6px; }
+
+  .small-input{ max-width:140px; }
+
+  .btn{
+    display:inline-flex;gap:8px;align-items:center;justify-content:center;
+    padding:10px 14px;border-radius:10px;border:none;cursor:pointer;
+    background:linear-gradient(180deg,var(--accent), #00b25a);
+    color:#051218;font-weight:700;box-shadow: 0 8px 30px rgba(0,210,120,0.12);
+  }
+
+  .issuer{
+    display:inline-flex;gap:8px;align-items:center;font-size:13px;color:var(--muted);
+  }
+
+  /* back face details */
+  .mag-strip{ height:40px; background:linear-gradient(90deg,#0b0b0b,#202226); border-radius:4px; margin-top:8px; }
+  .cvv-box{ display:flex; align-items:center; gap:10px; margin-top:18px; }
+  .cvv-strip{ background: linear-gradient(90deg,#fff,#f1f1f1); padding:8px 10px; border-radius:6px; min-width:120px; text-align:right; font-weight:700; letter-spacing:2px; }
+
+  .foot{
+    display:flex;justify-content:space-between;align-items:center;font-size:11px;color:var(--muted);margin-top:8px;
+  }
+
+  /* responsive */
+  @media (max-width:920px){
+    .wrap{ grid-template-columns: 1fr; gap:18px; justify-items:center; }
+    .card-scene{ margin:0 auto; }
+  }
+
+</style>
+</head>
+<video id="bg-video" autoplay muted loop>
+  <source src="{{ url_for('static', filename='videos/background.mp4') }}" type="video/mp4">
+  Your browser does not support the video tag.
+</video>
+
+<div class="content">
+  <!-- your centered content here -->
+</div>
+
+
+<div class="wrap" role="application" aria-label="Interactive credit card component">
+
+  <!-- 3D card scene -->
+  <div class="card-scene" id="scene" aria-hidden="false">
+    <div class="card" id="card" aria-label="Credit card preview">
+      <!-- FRONT -->
+      <div class="face front" id="card-front">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <div style="display:flex;gap:12px;align-items:center;">
+            <div class="chip" aria-hidden="true"></div>
+            <div>
+              <div class="small">Card Holder</div>
+              <div class="brand" id="card-holder-display">FULL NAME</div>
+            </div>
+          </div>
+          <div class="issuer" id="issuer-display">
+            <svg id="issuer-icon" width="36" height="24" viewBox="0 0 36 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+              <!-- placeholder; will be updated -->
+            </svg>
+            <div id="issuer-name" class="small">—</div>
+          </div>
+        </div>
+
+        <div>
+          <div class="card-number" id="card-number-display" aria-live="polite">
+            <!-- groups -->
+            <div class="num-group" id="g1">####</div>
+            <div class="num-group" id="g2">####</div>
+            <div class="num-group" id="g3">####</div>
+            <div class="num-group" id="g4">####</div>
+          </div>
+
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-top:14px;">
+            <div>
+              <div class="small">Expires</div>
+              <div id="exp-display" class="small">MM/YY</div>
+            </div>
+
+            <div>
+              <div class="small">Status</div>
+              <div id="status-live" class="small">Not validated</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- BACK -->
+      <div class="face back" id="card-back">
+        <div class="mag-strip" role="presentation"></div>
+
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <div style="width:65%;">
+            <div class="small">Signature</div>
+            <div style="background:linear-gradient(90deg,#fff,#f6f6f6);height:34px;border-radius:6px;margin-top:8px;padding:6px; color:#111;font-weight:600;">
+              <span id="sig-display">FULL NAME</span>
+            </div>
+          </div>
+
+          <div style="width:30%;">
+            <div class="small">CVV</div>
+            <div class="cvv-strip" id="cvv-display">***</div>
+          </div>
+        </div>
+
+        <div class="foot">
+          <div>Bank • Premium</div>
+          <div>•••• •••• •••• ••••</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Controls / Inputs -->
+  <div class="controls" aria-label="Card form">
+    <div class="form-row">
+      <label for="card-number">Card Number</label>
+      <div class="inputs">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <div id="live-num" class="live-field" aria-hidden="true">
+            <div class="tick" aria-hidden="true">
+              <!-- tick svg -->
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M20 6L9 17l-5-5" />
+              </svg>
+            </div>
+            <div id="live-num-text" class="small">enter card</div>
+          </div>
+
+          <div style="flex:1;">
+            <input id="card-number" type="tel" inputmode="numeric" autocomplete="cc-number" maxlength="23" placeholder="#### #### #### ####" aria-describedby="card-number-help" />
+            <div id="card-number-help" class="hint">Numbers only. We'll format automatically.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="form-row">
+      <label for="card-holder">Card Holder</label>
+      <div class="inputs">
+        <input id="card-holder" type="text" placeholder="Full Name" autocomplete="cc-name" maxlength="30" />
+      </div>
+    </div>
+
+    <div class="form-row">
+      <label for="expiry">Expiry</label>
+      <div class="inputs" style="display:flex;gap:8px;align-items:center;">
+        <input id="expiry" type="text" class="small-input" maxlength="5" placeholder="MM/YY" inputmode="numeric" autocomplete="cc-exp" />
+        <div id="live-exp" class="live-field" aria-hidden="true">
+          <div class="tick"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5" /></svg></div>
+          <div class="small" id="live-exp-text">MM/YY</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="form-row">
+      <label for="cvv">CVV</label>
+      <div class="inputs">
+        <div style="display:flex;gap:8px;align-items:center;">
+          <input id="cvv" class="small-input" type="tel" inputmode="numeric" maxlength="4" placeholder="***" autocomplete="cc-csc" />
+          <div id="live-cvv" class="live-field" aria-hidden="true">
+            <div class="tick"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5" /></svg></div>
+            <div class="small" id="live-cvv-text">CVV</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:12px;align-items:center;margin-top:6px;">
+      <button class="btn" id="validate-btn" type="button" title="Validate card">Validate card</button>
+      <div id="validation-message" class="small" style="color:var(--muted)">Status: not validated</div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+
+// Validate to make GUI responsive (only)
+
+function luhnCheck(numStr){
+  // remove spaces
+  const s = numStr.replace(/\s+/g, '');
+  if(!/^\d+$/.test(s)) return false;
+  let sum = 0;
+  // process from rightmost digit
+  let dbl = false;
+  for(let i = s.length - 1; i >= 0; i--){
+    let d = Number(s[i]);
+    if(dbl){
+      d = d * 2;
+      if(d > 9) d -= 9;
+    }
+    sum += d;
+    dbl = !dbl;
+  }
+  return sum % 10 === 0;
+}
+
+
+function detectIssuer(numStr){
+  const s = numStr.replace(/\s+/g,'');
+  if(/^4\d{0,}$/.test(s)) return {name:'Visa', cvv:3};
+  if(/^3[47]\d{0,}$/.test(s)) return {name:'American Express', cvv:4};
+  if(/^(5[1-5]\d{0,}|2(2[2-9]\d{0,}|[3-6]\d{0,}|7[01]\d{0,}|720\d{0,}))/.test(s)) return {name:'MasterCard', cvv:3};
+  if(/^(6011\d{0,}|64[4-9]\d{0,}|65\d{0,})/.test(s)) return {name:'Discover', cvv:3};
+  return {name:'Unknown', cvv:3};
+}
+
+
+
+function formatNumberForDisplay(s, issuerName){
+  const digits = s.replace(/\D/g,'');
+  if(issuerName === 'American Express'){
+    // 4-6-5
+    const g1 = digits.slice(0,4);
+    const g2 = digits.slice(4,10);
+    const g3 = digits.slice(10,15);
+    return [g1,g2,g3].filter(Boolean).join(' ');
+  } else {
+    // groups of 4
+    const groups = [];
+    for(let i=0;i<digits.length;i+=4) groups.push(digits.slice(i,i+4));
+    return groups.join(' ');
+  }
+}
+
+
+function validateExpiry(mmYY){
+  if(!/^\d{2}\/\d{2}$/.test(mmYY)) return false;
+  const [mm, yy] = mmYY.split('/').map(Number);
+  if(mm < 1 || mm > 12) return false;
+  // convert to 20xx (assume 2000-2099)
+  const now = new Date();
+  const fullYear = 2000 + yy;
+  const expiry = new Date(fullYear, mm - 1, 1);
+  // expiry is end of month; compare year/month only
+  const nowYM = new Date(now.getFullYear(), now.getMonth(), 1);
+  return expiry >= nowYM;
+}
+
+/* ---------------------------
+   DOM elements & interaction
+   --------------------------- */
+
+const card = document.getElementById('card');
+const scene = document.getElementById('scene');
+
+const inNumber = document.getElementById('card-number');
+const inHolder = document.getElementById('card-holder');
+const inExpiry = document.getElementById('expiry');
+const inCVV = document.getElementById('cvv');
+
+const g1 = document.getElementById('g1');
+const g2 = document.getElementById('g2');
+const g3 = document.getElementById('g3');
+const g4 = document.getElementById('g4');
+
+const issuerNameEl = document.getElementById('issuer-name');
+const issuerIcon = document.getElementById('issuer-icon');
+
+const cardHolderDisplay = document.getElementById('card-holder-display');
+const expDisplay = document.getElementById('exp-display');
+const sigDisplay = document.getElementById('sig-display');
+const cvvDisplay = document.getElementById('cvv-display');
+
+const liveNum = document.getElementById('live-num');
+const liveNumText = document.getElementById('live-num-text');
+const liveExp = document.getElementById('live-exp');
+const liveExpText = document.getElementById('live-exp-text');
+const liveCVV = document.getElementById('live-cvv');
+const liveCVVText = document.getElementById('live-cvv-text');
+
+const statusLive = document.getElementById('status-live');
+const validateBtn = document.getElementById('validate-btn');
+const validationMessage = document.getElementById('validation-message');
+
+/* ---------- issuer icon svgs ---------- */
+const issuerSvgs = {
+  'Visa': '<rect width="36" height="24" rx="4" fill="#1A4FDF"/><path d="M6 17L9 7l2 10 2-10 2 9 2-9 2 10" stroke="#fff" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>',
+  'MasterCard': '<circle cx="13" cy="12" r="8" fill="#FF5F00"/><circle cx="23" cy="12" r="8" fill="#EB001B"/><path d="M0 0h36v24H0z" fill="none"/>',
+  'American Express': '<rect width="36" height="24" rx="4" fill="#2E77B8"/><text x="6" y="16" font-size="8" fill="#fff" font-weight="700">AMEX</text>',
+  'Discover': '<rect width="36" height="24" rx="4" fill="#FF6000"/><text x="5" y="16" font-size="8" fill="#fff" font-weight="700">DISC</text>',
+  'Unknown': '<rect width="36" height="24" rx="4" fill="#334155"/><text x="4" y="16" font-size="6.5" fill="#fff">UNKNOWN</text>'
+};
+
+/* -----------------------
+   Input bindings & events
+   ----------------------- */
+
+// format the number as user types (preserve cursor reasonably)
+inNumber.addEventListener('input', (e) => {
+  const raw = e.target.value;
+  // only digits and spaces
+  const digits = raw.replace(/\D/g,'');
+  const issuer = detectIssuer(digits).name;
+  // format for display
+  const formatted = formatNumberForDisplay(digits, issuer);
+  e.target.value = formatted;
+  onNumberChanged(formatted);
+});
+
+// holder
+inHolder.addEventListener('input', (e) => {
+  const v = e.target.value.toUpperCase();
+  cardHolderDisplay.textContent = v || 'FULL NAME';
+  sigDisplay.textContent = v || 'FULL NAME';
+});
+
+// expiry input: format mm/yy as typed
+inExpiry.addEventListener('input', (e) => {
+  let v = e.target.value.replace(/[^\d]/g,'').slice(0,4);
+  if(v.length >= 3) v = v.slice(0,2) + '/' + v.slice(2);
+  e.target.value = v;
+  expDisplay.textContent = v || 'MM/YY';
+  liveExpText.textContent = v || 'MM/YY';
+  markFieldValidity(liveExp, validateExpiry(v));
+});
+
+// cvv: restrict length based on issuer
+inCVV.addEventListener('input', (e) => {
+  const digits = e.target.value.replace(/\D/g,'');
+  // limit to 4
+  e.target.value = digits.slice(0,4);
+  cvvDisplay.textContent = e.target.value ? e.target.value.replace(/./g,'*') : '***';
+  liveCVVText.textContent = e.target.value ? e.target.value.replace(/./g,'*') : 'CVV';
+  // validate length (we'll check exact length on validate button)
+});
+
+// when CVV focused, flip card to back
+inCVV.addEventListener('focus', () => flipToBack(true));
+inCVV.addEventListener('blur', () => flipToBack(false));
+
+inExpiry.addEventListener('focus', ()=> flipToBack(false));
+inNumber.addEventListener('focus', ()=> flipToBack(false));
+inHolder.addEventListener('focus', ()=> flipToBack(false));
+
+/* ---------- number change handler ---------- */
+function onNumberChanged(val){
+  const digits = val.replace(/\s+/g,'');
+  // update groups on card display (safe handling)
+  const issuer = detectIssuer(digits);
+  updateIssuerUI(issuer.name);
+  // set groups
+  const groups = val.split(' ');
+  // clear
+  [g1,g2,g3,g4].forEach((el,i)=> el.textContent = groups[i] || '####');
+
+  liveNumText.textContent = val || 'enter card';
+
+  if(digits.length >= 13){
+    const okLuhn = luhnCheck(val);
+    markFieldValidity(liveNum, okLuhn);
+    statusLive.textContent = okLuhn ? 'Card number looks good' : 'Card number invalid';
+  } else {
+    liveNum.classList.remove('valid','invalid');
+    statusLive.textContent = 'Not validated';
+  }
+}
+
+/* ---------- mark validity helper ---------- */
+function markFieldValidity(el, ok){
+  el.classList.remove('valid','invalid');
+  if(ok) el.classList.add('valid');
+  else el.classList.add('invalid');
+}
+
+/* ---------- issuer UI ---------- */
+function updateIssuerUI(name){
+  issuerNameEl.textContent = name;
+  issuerIcon.innerHTML = issuerSvgs[name] || issuerSvgs['Unknown'];
+  // tweak CVV maxlength
+  const cvvLen = detectIssuer(inNumber.value.replace(/\s+/g,'')).cvv;
+  inCVV.maxLength = cvvLen;
+  // show sample format
+  liveCVVText.textContent = inCVV.value ? inCVV.value.replace(/./g,'*') : (cvvLen===4? '****':'***');
+}
+
+/* ---------- validate flow ---------- */
+validateBtn.addEventListener('click', ()=>{
+  const n = inNumber.value.replace(/\s+/g,'');
+  const expiry = inExpiry.value;
+  const cvv = inCVV.value.replace(/\D/g,'');
+  const issuer = detectIssuer(n).name;
+  const cvvLen = detectIssuer(n).cvv;
+
+  const numberOk = n.length >= 13 && n.length <= 19 && luhnCheck(n);
+  const expiryOk = validateExpiry(expiry);
+  const cvvOk = (cvv.length === cvvLen);
+
+  markFieldValidity(liveNum, numberOk);
+  markFieldValidity(liveExp, expiryOk);
+  markFieldValidity(liveCVV, cvvOk);
+  //markFieldValidity(inHolder, data.nameOk);
+
+
+  if(numberOk && expiryOk && cvvOk){
+    validationMessage.textContent = 'Card valid — ready to use ✅';
+    validationMessage.style.color = 'var(--accent)';
+    statusLive.textContent = 'Validated ✓';
+  } else {
+    validationMessage.textContent = 'Invalid details — fix highlighted fields';
+    validationMessage.style.color = '#e06a6a';
+    statusLive.textContent = 'Validation failed';
+  }
+});
+
+
+validateBtn.addEventListener('click', async () => {
+    const card_number = inNumber.value.replace(/\s+/g,'');
+    const cvv = inCVV.value.replace(/\D/g,'');
+    const expiry = inExpiry.value;
+    const name = inHolder.value;   // <-- HERE name is read
+
+    try {
+        const res = await fetch('/validate-card', {
+            method: 'POST',
+            headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({card_number, cvv, expiry, name}) // <-- NAME SENT TO BACKEND
+        });
+
+        const data = await res.json();
+
+        // highlight number, expiry, cvv
+        markFieldValidity(liveNum, data.card_number_valid);
+        markFieldValidity(liveExp, data.expiry_valid);
+        markFieldValidity(liveCVV, data.cvv_valid);
+
+        // highlight name based on backend result
+        if (data.name_valid) {
+            inHolder.style.border = "1px solid rgba(0,210,120,0.18)";
+            inHolder.style.boxShadow = "0 6px 18px rgba(0,210,120,0.12)";
+        } else {
+            inHolder.style.border = "1px solid rgba(210,60,60,0.18)";
+            inHolder.style.boxShadow = "0 6px 18px rgba(210,60,60,0.12)";
+        }
+
+        // response message
+        if (data.overall_status) {
+            validationMessage.textContent = 'Card valid — backend verified ✅';
+            validationMessage.style.color = 'var(--accent)';
+            statusLive.textContent = 'Validated ✓';
+        } else {
+            validationMessage.textContent = 'Invalid — ' + data.errors.join('; ');
+            validationMessage.style.color = '#e06a6a';
+            statusLive.textContent = 'Validation failed';
+        }
+
+    } catch (err) {
+        console.error(err);
+        validationMessage.textContent = 'Server error';
+        validationMessage.style.color = '#e06a6a';
+    }
+});
+
+
+
+/* -----------------------
+   Card tilt & 3D interaction
+   ----------------------- */
+
+let isPressed = false;
+let rect = null;
+
+// tilt on mouse move
+scene.addEventListener('mousemove', (e) => {
+  rect = scene.getBoundingClientRect();
+  const cx = rect.left + rect.width/2;
+  const cy = rect.top + rect.height/2;
+  const dx = e.clientX - cx;
+  const dy = e.clientY - cy;
+  const px = dx / (rect.width/2);
+  const py = dy / (rect.height/2);
+  const rotY = px * 12; // left-right
+  const rotX = -py * 10; // up-down
+  const translateZ = 18 + Math.min(Math.hypot(px,py)*20, 24);
+
+  card.style.transform = `rotateY(${rotY}deg) rotateX(${rotX}deg) translateZ(${translateZ}px)`;
+});
+
+// subtle return when leaving
+scene.addEventListener('mouseleave', () => {
+  card.style.transform = `rotateY(0deg) rotateX(0deg) translateZ(30px)`;
+});
+
+// press effect for extra depth
+scene.addEventListener('mousedown', () => {
+  isPressed = true;
+  card.style.transition = 'transform 150ms';
+  card.style.transform += ' scale(0.995)';
+});
+window.addEventListener('mouseup', () => {
+  if(isPressed){
+    isPressed = false;
+    card.style.transition = 'transform 350ms cubic-bezier(.2,.9,.2,1)';
+  }
+});
+
+/* ---------- flip to back ---------- */
+let flipped = false;
+function flipToBack(yes){
+  flipped = yes;
+  if(yes){
+    card.style.transform += ' rotateY(180deg)';
+  } else {
+    // remove any rotateY 180deg appended
+    // safer: reset transform to center
+    card.style.transform = card.style.transform.replace(' rotateY(180deg)','');
+  }
+}
+
+/* ---------- init defaults ---------- */
+(function init(){
+  // placeholder sample
+  onNumberChanged('');
+  updateIssuerUI('Unknown');
+
+  inNumber.placeholder = '#### #### #### ####';
+  inHolder.value = '';
+  inExpiry.value = '';
+  inCVV.value = '';
+})();
+
+validateBtn.addEventListener('click', async () => {
+const card_number = inNumber.value.replace(/\s+/g,'');
+const cvv = inCVV.value.replace(/\D/g,'');
+const expiry = inExpiry.value;
+const name = inHolder.value;
+
+```
+// send to Flask backend
+try {
+    const res = await fetch('/validate-card', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({card_number, cvv, expiry, name})
+    });
+    const data = await res.json();
+
+    // update UI based on backend response
+    if(data.overall_status){
+        validationMessage.textContent = 'Card valid ✅ (Backend verified)';
+        validationMessage.style.color = 'var(--accent)';
+        statusLive.textContent = 'Validated ✓';
+    } else {
+        validationMessage.textContent = 'Invalid details — ' + data.errors.join('; ');
+        validationMessage.style.color = '#e06a6a';
+        statusLive.textContent = 'Validation failed';
+    }
+
+    // Optionally update field highlights based on backend results
+    markFieldValidity(liveNum, data.card_number_valid);
+    markFieldValidity(liveCVV, data.cvv_valid);
+    markFieldValidity(liveExp, data.expiry_valid);
+
+} catch(err){
+    console.error('Fetch error:', err);
+    validationMessage.textContent = 'Error contacting server';
+    validationMessage.style.color = '#e06a6a';
+}
+```
+
+});
+
+
+</script>
+
+</body>
+</html>
+
+
