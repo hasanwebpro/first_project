@@ -1,56 +1,98 @@
 from flask import Flask, request, jsonify, render_template
 
-import re
+from automata.fa.dfa import DFA
 from datetime import datetime
 
 app = Flask(__name__)
 
 # ---------------------------------------
-# 1. DFA VALIDATION (DIGITS + LENGTH)
+# 1. DFA VALIDATION (DIGITS + LENGTH) according to Official ISO/IEC 7812 standard
 # ---------------------------------------
-def dfa_validate_card_number(number):
-    for ch in number:
-        if not ch.isdigit():
-            return False
-    return 13 <= len(number) <= 19
 
+def dfa_validate_card_number(number):
+    # States: 0..19 = digit count, -1 = dead state
+    states = set(range(20)) | {-1}
+
+    # Alphabet: digits only
+    alphabet = set('0123456789') # {'0','1','2','3','4','5','6','7','8','9'}
+
+    # Transition function
+    transitions = {}
+
+    for state in range(20): # total 20 states q0 till q19
+        transitions[state] = {} # assign another dictionary
+        for d in alphabet:
+            transitions[state][d] = state + 1 if state < 19 else -1
+
+    # Dead state transitions
+    transitions[-1] = {d: -1 for d in alphabet}
+
+    # Create DFA
+    dfa = DFA(
+        states=states,
+        input_symbols=alphabet,
+        transitions=transitions,
+        initial_state=0,
+        final_states={13, 14, 15, 16, 17, 18, 19}
+    )
+
+    # Run DFA
+    return dfa.accepts_input(number)
 
 # ---------------------------------------
 # 2. DETECT CARD ISSUER
 # ---------------------------------------
 def detect_card_issuer(number):
-    patterns = {
-        "Visa": "^4[0-9]{12}(?:[0-9]{3})?$",
-        "MasterCard": "^5[1-5][0-9]{14}$",
-        "American Express": "^3[47][0-9]{13}$",
-        "Discover": "^6(?:011|5[0-9]{2})[0-9]{12}$"
-    }
-    for issuer, pattern in patterns.items():
-        if re.fullmatch(pattern, number):
-            return issuer
-    return "Unknown"
+    number = str(number)
+    length = len(number)
+    
+    if number.startswith("4") and (length == 13 or length == 16 or length == 19):
+        return "Visa"
+    elif number.startswith(("51", "52", "53", "54", "55")) and length == 16:
+        return "MasterCard"
+    elif number.startswith(("34", "37")) and length == 15:
+        return "American Express"
+    elif (number.startswith("6011") or number.startswith("65")) and length == 16:
+        return "Discover"
+    else:
+        return "Unknown"
 
 
 # ---------------------------------------
 # 3. CVV VALIDATION
 # ---------------------------------------
 def validate_cvv(cvv, issuer):
+    cvv = str(cvv)
+    
+    if not cvv.isdigit():
+        return False
+    
     if issuer == "American Express":
-        return re.fullmatch(r"\d{4}", cvv) != None
-    return re.fullmatch(r"\d{3}", cvv) != None
+        return len(cvv) == 4
+    else:
+        return len(cvv) == 3
 
 
 # ---------------------------------------
 # 4. EXPIRY DATE VALIDATION
 # ---------------------------------------
 def validate_expiry(expiry):
-    if re.fullmatch(r"(0[1-9]|1[0-2])/[0-9]{2}", expiry) == None:
+    # Check format MM/YY
+    if len(expiry) != 5 or expiry[2] != '/':
         return False
-
-    month, year = expiry.split("/")
-    month = int(month)
-    year = int("20" + year)
-
+    
+    month_part = expiry[:2]
+    year_part = expiry[3:]
+    
+    if not (month_part.isdigit() and year_part.isdigit()):
+        return False
+    
+    month = int(month_part)
+    year = int("20" + year_part) 
+    
+    if month < 1 or month > 12:
+        return False
+    
     now = datetime.now()
     if year > now.year:
         return True
@@ -63,7 +105,13 @@ def validate_expiry(expiry):
 # 5. NAME VALIDATION
 # ---------------------------------------
 def validate_name(name):
-    return re.fullmatch(r"[A-Za-z ]{3,40}", name) != None
+    if not (3 <= len(name) <= 40):
+        return False
+    
+    for char in name:
+        if not (char.isalpha() or char == ' '):
+            return False
+    return True
 
 
 # ---------------------------------------
@@ -85,7 +133,8 @@ def validate_card_input(card_number, cvv, expiry, name):
         result["card_number_valid"] = True
         result["issuer"] = detect_card_issuer(card_number)
         if result["issuer"] == "Unknown":
-            result["errors"].append("Card issuer pattern not recognized.")
+            result["card_number_valid"] = False
+            result["errors"].append("Invalid card number format.")
     else:
         result["errors"].append("Invalid card number format.")
 
